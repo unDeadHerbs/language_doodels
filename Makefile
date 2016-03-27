@@ -1,21 +1,25 @@
 CXX      = g++
 CXXFLAGS = -std=c++1y -Wall -lpthread
 SOURCES  = $(wildcard *.cpp)
-OBJECTS  = $(SOURCES:.cpp=.o)
-EXEC     = $(SOURCES:.cpp=.out)
+HPPS        = $(wildcard *.hpp)
+OBJECTS     = $(HPPS:.hpp=.o)
+EXEC     = apl
 
+all: $(EXEC) clean tags
 
-all: $(EXEC) clean
-
-%.out: %.o
-	-$(CXX) $(CXXFLAGS) $< -o $@ $($< -o $@:.out=.o)
+$(EXEC): $(OBJECTS) $(EXEC).o
+	-$(CXX) $(CXXFLAGS) -o $(EXEC) $(EXEC).o $(OBJECTS)
 
 %.o: %.cpp
 	-$(CXX) $(CXXFLAGS) -c $< -o $@
 
 check-syntax:
-	$(CXX) $(CXXFLAGS) ${CHK_SOURCES} #-o /dev/null
+	$(CXX) $(CXXFLAGS) ${CHK_SOURCES} -o /dev/null
 # -S-fsyntax-only
 
+tags:
+	rm -f TAGS
+	ls|grep "pp$$"|xargs etags -a
+
 clean:
-	rm -f $(OBJECTS)
+	rm -f $(OBJECTS) $(EXEC).o
