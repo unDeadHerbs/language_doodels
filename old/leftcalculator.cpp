@@ -5,7 +5,7 @@
  *
  * @section DESCRIPTION
  *
- * This program is a simple calculator that parses 
+ * This program is a simple calculator that parses
  *  from right to left and is created as a stepping stone
  *  to making an APL calculator.
  */
@@ -23,7 +23,7 @@
 /**
  * This class is an impimentaiton of a binary parse tree.
  *
- * 
+ *
  */
 class parse{
 private:
@@ -34,7 +34,7 @@ public:
 	parse():l(NULL),r(NULL){}
 	/**
 	 * If passed a string make that the only data element.
-   */
+	 */
 	explicit parse(std::string opr)
 		:op(opr),l(NULL),r(NULL){
 		if(DEBUG>5)std::cout<<"          string"<<std::endl;
@@ -226,9 +226,9 @@ parse evalp(std::string& exp){
 	std::deque<parse> t;
 	if(DEBUG>1)std::cout<<"  tokenise the string"<<std::endl;
 	exp.erase(exp.begin(),
-	          std::find_if(exp.begin(),
-	                       exp.end(),
-	                       std::not1(std::ptr_fun<int, int>(std::isspace))));
+						std::find_if(exp.begin(),
+												 exp.end(),
+												 std::not1(std::ptr_fun<int, int>(std::isspace))));
 	if(DEBUG>1)std::cout<<"  remove leading space"<<std::endl;
 	if(DEBUG>1)std::cout<<"  "<<exp<<std::endl;
 	while(exp.front()!=')'&&exp.size()){
@@ -255,9 +255,9 @@ parse evalp(std::string& exp){
 		}
 		if(DEBUG>2)std::cout<<"    "<<exp<<" t:"<<t.size()<<" tmp:"<<tmp<<std::endl;
 		exp.erase(exp.begin(),
-		          std::find_if(exp.begin(),
-		                       exp.end(),
-		                       std::not1(std::ptr_fun<int, int>(std::isspace))));
+							std::find_if(exp.begin(),
+													 exp.end(),
+													 std::not1(std::ptr_fun<int, int>(std::isspace))));
 		if(DEBUG>1)std::cout<<"  remove leading space"<<std::endl;
 		if(DEBUG>1)std::cout<<"  "<<exp<<std::endl;
 	}
