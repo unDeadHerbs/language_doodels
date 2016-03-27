@@ -56,7 +56,7 @@ Monadic Functions
 | `○` | Circle | Converts ⍵ into rotations (multiplies by 2 pi)
 | `⌽` | Reverse | Revers the ordering of the First index
 | `⊖` | Rotate | Reverse the ordering of the Second index
-| `⍉` | Transpose | Exchange the values between the first and second index 
+| `⍉` | Transpose | Exchange the values between the first and second index
 | `⍳` | Indecies | A vector from INDEX_BASE to ⍵ |
 | `!` | Factorial | returns the factorial of the number (also works on decimals)
 
