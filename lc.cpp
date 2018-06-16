@@ -1,25 +1,5 @@
-#include <iostream>
-using std::cin;
-using std::cout;
-using std::endl;
-using std::getline;
 #include <string>
 using std::string;
-
-/*
-class l {
-        string C;
-
-      public:
-        explicit l(string c) : C(c) {
-          //
-        }
-        friend std::ostream &operator<<(std::ostream &o, l rhs) {
-                return o << rhs.C;
-        }
-        void b() {}
-};
-//*/
 
 int find_match(const string l, const int p) {
 	switch (l[p]) {
@@ -35,7 +15,6 @@ int find_match(const string l, const int p) {
 }
 
 string brep(const string l, const string v, const int d= 0) {
-	// cout << "dbg l:" << l << " v:" << v << " d:<" << d << endl;
 	if (!l.size()) return l;
 	if (d == 0) return brep(l.substr(1), v, 1);
 	switch (l[0]) {
@@ -80,33 +59,17 @@ string b(const string l) {
 			                  l.substr(f + 1, s - f))
 			       + ')' + l.substr(s + 1);
 		} else {
-			return '('
-			       + brep(l.substr(1, f - 1), l.substr(f + 1, 1))
-			       + ')' + l.substr(f + 2);
+			return brep(l.substr(1, f - 1), l.substr(f + 1));
 		}
 	} else
 		return l;
 }
 
-/*
-class char_str{
-  //only createable as temp value?
-  vector<char> buffer;
-public:
-  operator<<(char){
-    push to buffer;
-  }
-  oper<<(char_str){
-    hold mutex
-    puch from other to self
-    when other is destroyed release mutex
-  }
-  opper<<(ostream,this){
-    hold out mutex
-    push to ostream untill self dead
-  }
-};
-//*/
+#include <iostream>
+using std::cin;
+using std::cout;
+using std::endl;
+using std::getline;
 
 int main() {
 	string cmd;
