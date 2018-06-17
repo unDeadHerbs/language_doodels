@@ -1,6 +1,10 @@
 #include <string>
 using std::string;
 
+/*
+ * Helpers
+ */
+
 int find_match(const string l, const int p) {
 	switch (l[p]) {
 	case ')':
@@ -13,6 +17,10 @@ int find_match(const string l, const int p) {
 		return find_match(l, p + 1);
 	}
 }
+
+/*
+ * Lambda-Calc beta reducer
+ */
 
 string brep(const string l, const string v, const int d= 0) {
 	if (!l.size()) return l;
@@ -65,14 +73,29 @@ string b(const string l) {
 		return l;
 }
 
+/*
+ * CLI Interface
+ */
+
+string handel(const string cmd) {
+	if (cmd[0] == '(') return b(cmd);
+	return cmd;
+}
+
+/*
+ * REPL Prompt
+ */
+
 #include <iostream>
 using std::cin;
 using std::cout;
 using std::endl;
 using std::getline;
 
+#define PROMPT "> "
 int main() {
 	string cmd;
-	while (getline(cin, cmd)) cout << b(cmd) << endl;
+	cout << PROMPT;
+	while (getline(cin, cmd)) cout << handel(cmd) << endl << PROMPT;
 	return 0;
 }
