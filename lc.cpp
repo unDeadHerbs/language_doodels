@@ -1,9 +1,15 @@
-#include <string>
-using std::string;
+#define ERROR(x)                                                               \
+	do {                                                                   \
+		puts(x);                                                       \
+		exit(-1);                                                      \
+	} while (0)
 
 /*
  * Helpers
  */
+
+#include <string>
+using std::string;
 
 int find_match(const string l, const int p) {
 	switch (l[p]) {
@@ -12,7 +18,7 @@ int find_match(const string l, const int p) {
 	case '(':
 		return find_match(l, find_match(l, p + 1) + 1);
 	case '\0':
-		exit(-1);
+		ERROR("find_match found no match");
 	default:
 		return find_match(l, p + 1);
 	}
