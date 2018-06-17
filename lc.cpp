@@ -86,7 +86,7 @@ string b(const string l) {
 		}
 		if (!(l.size() - f - 1)) return l.substr(1, f - 1);
 		if (l[f + 1] == '(') {
-			int s= find_match(l, f + 2);
+			const int s= find_match(l, f + 2);
 			return '(' + brep(l.substr(1, f - 1),
 			                  l.substr(f + 1, s - f))
 			       + ')' + l.substr(s + 1);
