@@ -28,6 +28,16 @@ bool starts_with(const string l, const string v) {
 		if (!l.compare(0, v.size(), v)) return true;
 	return false;
 }
+string ParenClean(const string l) {
+	if (l.size() < 3) return l;
+	if (l[0] == '(')
+		if (l[1] == '(')
+			if (find_match(l, 1) == find_match(l, 2) + 1)
+				return ParenClean(l.substr(1, find_match(l, 2)))
+				       + ParenClean(
+				             l.substr(find_match(l, 1) + 1));
+	return l[0] + ParenClean(l.substr(1));
+}
 
 /*
  * Lambda-Calc beta reducer
@@ -106,7 +116,7 @@ using std::map;
 map<char, string> defn;
 
 string saveDef(const char n, const string v) {
-	defn[n]= v;
+	defn[n]= ParenClean(v);
 	return n + ('=' + defn[n]);
 }
 string convertToPure(const string l) {
@@ -136,7 +146,7 @@ string handel(const string cmd) {
 				return "Parse Error";
 		}
 	if (cmd[0] == '(' || (cmd[0] >= 'A' && cmd[0] <= 'Z'))
-		return convertFromPure(b(convertToPure(cmd)));
+		return ParenClean(convertFromPure(b(convertToPure(cmd))));
 	return cmd;
 }
 
