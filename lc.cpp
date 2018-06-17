@@ -17,6 +17,11 @@ int find_match(const string l, const int p) {
 		return find_match(l, p + 1);
 	}
 }
+bool starts_with(const string l, const string v) {
+	if (v.size() <= l.size())
+		if (!l.compare(0, v.size(), v)) return true;
+	return false;
+}
 
 /*
  * Lambda-Calc beta reducer
@@ -83,7 +88,33 @@ string b(const string l) {
 			return brep(l.substr(1, f - 1), l.substr(f + 1));
 		}
 	} else
-		return l;
+		return l[0] + b(l.substr(1));
+}
+
+/*
+ * Sub-expression Nameing
+ */
+
+#include <map>
+using std::map;
+map<char, string> defn;
+
+string saveDef(const char n, const string v) {
+	defn[n]= v;
+	return n + ('=' + defn[n]);
+}
+string convertToPure(const string l) {
+	if (!l.size()) return l;
+	if (defn.count(l[0])) return defn[l[0]] + convertToPure(l.substr(1));
+	return l[0] + convertToPure(l.substr(1));
+}
+string convertFromPure(const string l) {
+	if (!l.size()) return l;
+	for (const auto& kvp : defn)
+		if (starts_with(l, kvp.second))
+			return kvp.first
+			       + convertFromPure(l.substr(kvp.second.size()));
+	return l[0] + convertFromPure(l.substr(1));
 }
 
 /*
@@ -91,7 +122,15 @@ string b(const string l) {
  */
 
 string handel(const string cmd) {
-	if (cmd[0] == '(') return b(cmd);
+	if (cmd.size() > 1)
+		if (cmd[1] == '=') {
+			if (cmd[0] >= 'A' && cmd[0] <= 'Z')
+				return saveDef(cmd[0], cmd.substr(2));
+			else
+				return "Parse Error";
+		}
+	if (cmd[0] == '(' || (cmd[0] >= 'A' && cmd[0] <= 'Z'))
+		return convertFromPure(b(convertToPure(cmd)));
 	return cmd;
 }
 
