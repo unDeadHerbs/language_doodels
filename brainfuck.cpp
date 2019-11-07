@@ -9,12 +9,13 @@
 using std::cout;
 using std::endl;
 using std::map;
+using std::setw;
 using std::string;
 using std::vector;
 
 #define NOW                                                     \
 	(_time = std::time(nullptr), _ltime = std::localtime(&_time), \
-	 std::put_time(_ltime, "%Y-%m-%d %H:%M:%S"))
+	 std::put_time(_ltime, "%Y-%j %H:%M:%S"))
 
 auto _time = std::time(nullptr);
 auto _ltime = std::localtime(&_time);
@@ -23,8 +24,6 @@ auto _ltime = std::localtime(&_time);
 
 #define DEBUG 0
 #if DEBUG > 0
-#include <ctype.h>
-#include <iostream>
 #define DPRINT(x)                                                            \
 	(std::cout << "DPRINT: File:" << __FILE__ << " Line:" << __LINE__ << " - " \
 	           << x << std::endl)
@@ -46,22 +45,24 @@ class num {
  public:
 	num() : number(0) {}
 	num(int n) : number(n) {}
-	operator int const() const { return number; }
+	operator long long int const() const { return number; }
 	num& operator++() {
 		number++;
 		return *this;
 	}
 	num& operator++(int) {
-		number++;
-		return *this;
+		auto ret = *this;
+		++*this;
+		return ret;
 	}
 	num& operator--() {
 		number--;
 		return *this;
 	}
 	num& operator--(int) {
-		number--;
-		return *this;
+		auto ret = *this;
+		--*this;
+		return ret;
 	}
 };
 
@@ -82,7 +83,9 @@ struct Stats {
 std::ostream& operator<<(std::ostream& o, Stats const& s) {
 	return o  //<< "Program_Length=" << program.states.size()
 	          // that isn't a helpful stat in this situation
-	       << "States_Used=" << machine.tape.size() << " Cycles=" << s.Cycles;
+	       << "States =" << setw(11) << machine.tape.size()
+	       << " Cycles =" << setw(21) << s.Cycles;
+	// 80 chars with date and flag/read print
 }
 
 #if DEBUG
@@ -123,10 +126,10 @@ char ch;
 void PrimeMachine() {
 	while (NEXT_CHAR != EOF) switch (CURCHAR) {
 				// clang-format off
-    case '[': case ']':
-    case '+': case '-':
-    case '<': case '>':
-    case ',': case '.':
+			case '[': case ']':
+			case '+': case '-':
+			case '<': case '>':
+			case ',': case '.':
 				// clang-format on
 				program.states.push_back((CODE)CURCHAR);
 				break;
@@ -222,8 +225,8 @@ void RunMachine() {
 			case INPT:
 				machine.tape[machine.head] = NEXT_CHAR;
 				if (CURCHAR == 'F')
-					cout << NOW << " : Flag " << INPUT_FLAGS++ << " Found : Stats - "
-					     << stats << std::flush << endl;
+					cout << NOW << " : Flag " << setw(3) << INPUT_FLAGS++ << " : "
+					     << stats << std::flush << endl;  // 80 Chars exatly
 				else if (CURCHAR == 'D') {
 					INPUT_DEBUG = !INPUT_DEBUG;
 					if (INPUT_DEBUG)
@@ -233,9 +236,10 @@ void RunMachine() {
 				} else {
 					if (INPUT_DEBUG)
 						cout << NOW << " : Read '" << (CURCHAR == '\n' ? 'n' : CURCHAR)
-						     << "' : Stats - " << stats << std::flush << endl;
-					// only advance the state if a real read happened
+						     << "' : " << stats << std::flush << endl;
+					// 80 Chars exatly
 					program.state++;
+					// only advance the state if a real read happened
 				}
 				break;
 			case OUTP:
@@ -254,7 +258,7 @@ void RunMachine() {
 	}
 }
 
-void PrintStats() { cout << endl <<NOW<< stats << endl; }
+void PrintStats() { cout << endl << NOW << stats << endl; }
 
 int main() {
 	PrimeMachine();
