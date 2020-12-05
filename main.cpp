@@ -166,8 +166,8 @@ sad:
             << "trace : " << ld << std::endl;
 }
 
-int main() {
-  std::vector<std::pair<int, int>> n1({{1, 0}, {1, 0}, {-2, -1}}),
+void test_1p2e3() {
+  vecpair n1({{1, 0}, {1, 0}, {-2, -1}}),
       n2({{1, 0}, {1, 0}, {-2, 1}, {-3, -2}}),
       oplus({{1, 0},
              {1, 0},
@@ -178,7 +178,6 @@ int main() {
              {1, -3},
              {-6, -5}}),
       n3({{1, 0}, {1, 0}, {-2, 1}, {-3, 1}, {-4, -3}});
-
   std::cout << oplus << std::endl << n2 << std::endl << n1 << std::endl;
   std::cout << std::endl;
   vecpair p21 = join(join(oplus, n2), n1);
@@ -188,5 +187,24 @@ int main() {
   cleanup(p21);
   std::cout << p21 << std::endl << std::endl;
   std::cout << n3 << std::endl;
+}
+
+void test_2t2e4() {
+  // This test is borken.  I haven't used these as immutable
+  // data-structures, so some of it is broken.
+  vecpair n2({{1, 0}, {1, 0}, {-2, 1}, {-3, -2}}),
+      otimes({{1, 0}, {1, 0}, {1, 0}, {1, 0}, {1, -1}, {-5, 1}, {-5, -4}}),
+      n4({{1, 0}, {1, 0}, {-2, 1}, {-3, 1}, {-4, 1}, {-5, -4}});
+  vecpair t22 = join(join(otimes, n2), n2);
+  do
+    std::cout << t22 << std::endl << std::endl;
+  while (beta(t22));
+  cleanup(t22);
+  std::cout << t22 << std::endl << std::endl;
+  std::cout << n4 << std::endl;
+}
+
+int main() {
+  test_2t2e4();
   return 0;
 }
