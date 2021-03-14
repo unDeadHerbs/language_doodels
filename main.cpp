@@ -192,6 +192,9 @@ void test_1p2e3() {
 void test_2t2e4() {
   // This test is borken.  I haven't used these as immutable
   // data-structures, so some of it is broken.
+
+	// NOTE: Apparently church's lambda calc was call-by-name, this
+	// might be the source of my problems.  Think on this more.
   vecpair n2({{1, 0}, {1, 0}, {-2, 1}, {-3, -2}}),
       otimes({{1, 0}, {1, 0}, {1, 0}, {1, 0}, {1, -1}, {-5, 1}, {-5, -4}}),
       n4({{1, 0}, {1, 0}, {-2, 1}, {-3, 1}, {-4, 1}, {-5, -4}});
