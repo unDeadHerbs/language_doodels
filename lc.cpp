@@ -44,6 +44,7 @@ string ParenClean(const string l) {
  */
 
 string inc(const string l, const int v= 1, int d= 0) {
+	if (v == 0) return l;
 	if (!l.size()) return l;
 	if (v > 1) return inc(inc(l), v - 1);
 	if (l[0] == 'l') return l[0] + inc(l.substr(1), v, d + 1);
@@ -52,6 +53,31 @@ string inc(const string l, const int v= 1, int d= 0) {
 		if (l[0] - '0' > d)
 			return char(l[0] + 1) + inc(l.substr(1), v, d);
 	return l[0] + inc(l.substr(1), v, d);
+}
+
+string parenMove(string l) {
+	char context= ')';
+	int pos= 0;
+	while (l[pos]) {
+		switch (context) {
+		case ')':
+			if (l[pos] == 'l')
+				context= 'l';
+			else
+				break;
+		case 'l':
+			if (l[pos] == ')')
+				context= ')';
+			else if (l[pos] == '(')
+				if (l[pos + 1] == ')') {
+					// rm pos and pos+1
+				} else {
+					l[pos]= l[pos + 1];
+					l[pos + 1]= '(';
+				}
+		}
+		pos++;
+	}
 }
 
 string brep(const string l, const string v, const int d= 0) {
@@ -83,16 +109,16 @@ string brep(const string l, const string v, const int d= 0) {
 }
 
 string b(const string l) {
+	if (!l.size()) return l;
 	if (l[0] == '(') {
 		const int f= find_match(l, 1);
 		if (l[1] == '(') {
 			const int s= find_match(l, 2);
-			if (s + 1 == f)
+			if (s + 1 == f) // continue to eval?
 				return l.substr(1, s) + l.substr(f + 1);
-			else {
+			else
 				return '(' + b(l.substr(1, f - 1)) + ')'
 				       + l.substr(f + 1);
-			}
 		}
 		if (!(l.size() - f - 1)) return l.substr(1, f - 1);
 		if (l[f + 1] == '(') {
@@ -100,9 +126,10 @@ string b(const string l) {
 			return '(' + brep(l.substr(1, f - 1),
 			                  l.substr(f + 1, s - f))
 			       + ')' + l.substr(s + 1);
-		} else {
-			return brep(l.substr(1, f - 1), l.substr(f + 1));
-		}
+		} else
+			return '('
+			       + brep(l.substr(1, f - 1), l.substr(f + 1, 1))
+			       + ')' + l.substr(f + 2);
 	} else
 		return l[0] + b(l.substr(1));
 }
@@ -138,6 +165,7 @@ string convertFromPure(const string l) {
  */
 
 string handel(const string cmd) {
+	if (!cmd.size()) return cmd;
 	if (cmd.size() > 1)
 		if (cmd[1] == '=') {
 			if (cmd[0] >= 'A' && cmd[0] <= 'Z')
@@ -145,9 +173,9 @@ string handel(const string cmd) {
 			else
 				return "Parse Error";
 		}
-	if (cmd[0] == '(' || (cmd[0] >= 'A' && cmd[0] <= 'Z'))
-		return ParenClean(convertFromPure(b(convertToPure(cmd))));
-	return cmd;
+	// if (cmd[0] == '(' || (cmd[0] >= 'A' && cmd[0] <= 'Z'))
+	return ParenClean(
+	    /*convertFromPure(*/ b(convertToPure(cmd))); //);
 }
 
 /*
