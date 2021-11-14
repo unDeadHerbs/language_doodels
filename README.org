@@ -1,0 +1,1 @@
+This is a folder of small (mostly unfinished) project where I experiment with programming language Design, parsers, compilers, and such not.
