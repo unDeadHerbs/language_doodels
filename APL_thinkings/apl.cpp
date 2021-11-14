@@ -18,7 +18,7 @@
 #include <cctype>
 #include <locale>
 
-#include  "defines.cpp"
+#include "defines.cpp"
 #include "aplvector.hpp"
 #include "parse.hpp"
 
