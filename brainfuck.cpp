@@ -244,11 +244,15 @@ void RunMachine() {
 				break;
 			case OUTP:
 				if (' ' <= machine.tape[machine.head] &&
-				    machine.tape[machine.head] <= '~') {
-					cout << (char)machine.tape[machine.head] << std::flush;
-					// if (INPUT_DEBUG) cout << endl;  // to keep the output pretty
-					// unneeded as bf.bf reads all inputs before evaluation
-				}
+				    machine.tape[machine.head] <= '~')
+					if (INPUT_DEBUG)
+						cout << NOW << " : Prnt '"
+						     << (((char)machine.tape[machine.head]) == '\n'
+						             ? 'n'
+						             : ((char)machine.tape[machine.head]))
+						     << "' : " << stats << std::flush << endl;
+					else
+						cout << (char)machine.tape[machine.head] << std::flush;
 				program.state++;
 				break;
 		}

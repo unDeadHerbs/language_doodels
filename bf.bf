@@ -9,7 +9,9 @@ The program is terminated by a bang
 +[,   Tape = Curr Char ; Continue Flag
    read symbol
    switch LEFT RIGHT UP DOWN IN OUT WHILE DONE BANG DEFAULT
+
    UP     = 43 = 1
+   [<]> if on blank then prevent left shift otherwise do nothing
    if char [ char ; tmpChar
      copy tmpChar char [->+>+<<]>>[-<<+>>]<
      tmpChar sub 43 -------------------------------------------
@@ -26,16 +28,35 @@ The program is terminated by a bang
    RIGHT  = 62 = 6
    WHILE  = 91 = 7
    DONE   = 93 = 8
-   BANG   = 33
-   DEFAULT
 
-  if cont flag move to here and loop <[->+<]> else done
-]
+   BANG   = 33
+   [<]> if on blank then prevent left shift
+   if char [ char ; tmpChar
+     copy tmpChar char [->+>+<<]>>[-<<+>>]<
+     tmpChar sub 33 ---------------------------------
+     if not 0 [ set flag to 1 ->[-]+< ]
+     move not flag to here (accept) +>[-<->]<
+     if accept [ clear -
+                 set char to 0 <[-]
+		 on blank cell
+		 exta for check >]
+   ]< end BANG
+
+   DEFAULT
+   [ clear char [-]
+     set cont flag <+
+     move to next blank (current) >
+   ]
+
+  if cont flag move to here <[->+<]>
+] loop else done
+move to last char <<
 
 make the divider
+  just a temp divider +>+<
 
 setup the head
-    move to the start of the tape [<<]>>
+    move to the start of the tape <<[<<]>>
 
 run the program
    switch LEFT RIGHT UP DOWN IN OUT WHILE DONE BANG
