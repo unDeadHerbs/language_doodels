@@ -1,0 +1,8 @@
+* lambda and trees
+
+See record from 9958
+
+This is a consideration about if the names for formal paramters can be
+removed from lambdas by instead referencing the depth from the current
+position back to the root for the lambda bound.  This would allow a
+lambda to be converted into a tree of integers.
