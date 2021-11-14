@@ -1,0 +1,606 @@
+#+STARTUP: content showstars indent
+#+PROPERTY: header-args:scheme :results value pp :noweb yes
+
+* Idea
+I've the idea in my head that macros are just functions that quote
+their arguments.  I've never heard them talked about this way before
+though.  To test this I'm building a lazily evaluated scheme like
+language.
+* Back Reference
+This is a continuation of the ideas presented in audio logs on 10300.
+
+This is a lazy evaluator of a lisp with both lambda and macros.
+* Startup
+Just check that everytihng is working first.
+
+#+BEGIN_SRC scheme
+  "hello"
+#+END_SRC
+
+#+BEGIN_SRC scheme
+  (use-modules (system base pmatch))
+  (define eval-lazy-lm
+   (lambda (expr bindings)
+     (pmatch expr
+       [,n (guard (number? n)) n]
+       [else "error"])))
+  (define elm eval-lazy-lm)
+#+END_SRC
+* 2021-11-13
+** First Attempt
+I want numbers just so that I can perform some basic calculations and
+check that it works.  I'll also need some other base functions to work
+with them.  Let's build a basic version without that first, just to
+see branching and evaluation order.
+#+BEGIN_SRC scheme
+  (use-modules (system base pmatch))
+  (define elm ;eval-lazy-lambda-macro
+   (lambda (expr bindings)
+     (pmatch expr
+       [,n (guard (number? n)) n]
+       [((m ,p ,b) ,a) (elm b (cons `(,p ,a) bindings))]
+       [else `(,expr ,bindings)])))
+#+END_SRC
+
+Including the old environment from the MiniKanren lectures
+#+BEGIN_SRC scheme
+  (use-modules (system base pmatch))
+  (define empty-env '())
+  (define lookup
+    (lambda (x env)
+      (pmatch env
+        [() (error 'lookup
+                  (format #t "unbound variable ~s" x))]
+        [((,V . ,v) . ,env^) (guard (eq? V x)) v]
+        [(,b . ,env^) (lookup x env^)])))
+  (define elmr
+    (lambda (expr bindings)
+      (pmatch expr
+              ; numbers
+              [,n (guard (number? n)) n]
+              ; variable lookup
+              [,x (guard (symbol? x)) (elmr (lookup x bindings) bindings)]
+              ; lazy macro expansion
+              [((m ,p ,b) ,a) (elmr b `((,p ,a) . bindings))]
+              ; TODO: lazy lambda expansion
+              ; TODO: left left recusion
+              ; [(,e ,a) (elmr `(,(elmr e bindings) ,a) bindings)]
+              
+              ; Can I just wrap the function up into a lazy to make
+              ; the recusion single?
+              ; [(,e ,a) (let [(t (gensym))]
+              ;               (elmr `(,t ,a) `((,t ,e) bindings)))]
+              
+              ; Not really, because then then next step is to
+              ; re-expand it this doesn't remove the double recusion.
+              ; Perhaps continuations can save me here.  If I CPS the
+              ; interpreter then the second recusion just becomes a
+              ; modification of the continuation stack.  I'd prefer to
+              ; have the continuation stack shown as a set of bindings
+              ; in the lazy evaluation.  Can I do that?  Onto the next
+              ; verion!
+              
+              ; Error case, just show the state
+              [else `(,expr ,bindings)])))
+  (define elm ;eval-lazy-lambda-macro
+    (lambda (expr)
+      (elmr expr empty-env)))
+#+END_SRC
+** CPS Distraction
+#+BEGIN_SRC scheme
+  (use-modules (system base pmatch))
+  (define empty-env '())
+  (define lookup
+    (lambda (x env)
+      (pmatch env
+        [() (error 'lookup
+                  (format #t "unbound variable ~s" x))]
+        [((,V . ,v) . ,env^) (guard (eq? V x)) v]
+        [(,b . ,env^) (lookup x env^)])))
+  (define elmr
+    (lambda (expr cont bindings)
+      ; contination is [(fun's binding, local bindings) ... ]
+      (pmatch expr
+              ; numbers
+              [,n (guard (number? n))
+                  (elmr `(,(caar cont) ,n) (cdr cont) (cadr cont))]
+              ; variable lookup
+              [,x (guard (symbol? x))
+                  (elmr (lookup x bindings) cont bindings)]
+              ; lazy macro expansion
+              [((m ,p ,b) ,a)
+               (elmr b cont `((,p ,a) . bindings))]
+              ; Immediate (non-lazy/symbolic) application
+              [((I ,a) ,e)
+               (elmr `(,e ,a) cont bindings)]
+              ; TODO: lazy lambda expansion
+              ; TODO: named aplication
+              [(,f ,a) (guard (symbol? f))
+               (let ([con (gensym)])
+                 (elmr f
+                       `((,con ,bindings) . ,cont)
+                       `((,con (I ,a)) . ,bindings)))]
+                cont bindings];lookup function and continue
+              ; TODO: left left recusion
+              [(,e ,a)
+               (let ([con (gensym)])
+                 (elmr e
+                       `((,con ,bindings) . ,cont)
+                       `((,con (I ,a)) . ,bindings)))]
+              ; Error case, just show the state
+              [else `(,expr ,cont ,bindings)])))
+  (define elm ;eval-lazy-lambda-macro
+    (lambda (expr)
+      (elmr expr empty-env)))
+#+END_SRC
+
+I'm building a new intermediate applicative type to deal twith the
+lazy left left, lets's not bother with that for now
+
+Allowing double recursion
+** Back to cowboy-ing it
+#+BEGIN_SRC scheme
+  (use-modules (system base pmatch))
+  (define empty-env '())
+  (define lookup
+    (lambda (x env)
+      (pmatch env
+        [() (error 'lookup
+                  (format #t "unbound variable ~s" x))]
+        [((,V . ,v) . ,env^) (guard (eq? V x)) v]
+        [(,b . ,env^) (lookup x env^)])))
+  (define rep*
+    (lambda (old new tree)
+      (pmatch tree
+              [,s (guard (symbol? s))
+                  (if (eq? s old) new s)]
+              [() '()]
+              [(,a . ,d)
+               `(,(rep* old new a) . ,(rep* old new d))])))
+  (define elmr
+    (lambda (expr bindings)
+      (pmatch expr
+              ; numbers
+              [,n (guard (number? n)) n]
+              ; variable lookup
+              [,x (guard (symbol? x)) (elmr (lookup x bindings) bindings)]
+              ; lazy macro expansion
+              [((m ,p ,b) ,a) (elmr b `((,p . ,a) . ,bindings))]
+              ; lazy lambda expansion
+              [((l ,p ,b) ,a) (let ([s (gensym)])
+                                (elmr (rep* p s b)
+                                      `((,s . ,a) . ,bindings)))]
+              ; left left recusion
+              [(,e ,a) (elmr `(,(elmr e bindings) ,a) bindings)]
+              ; Error case, just show the state
+              [else `(,expr ,bindings)])))
+  (define elm ;eval-lazy-lambda-macro
+    (lambda (expr)
+      (elmr expr empty-env)))
+#+END_SRC
+*** Some Small tests
+#+BEGIN_SRC scheme
+(elm '3)
+(elm '(m x x))
+(elm '((m x x) 3))
+#+END_SRC
+** Making Let?
+let's try and define =let=?  =let= is a new symbol added by a macro
+wrapping the environment.  I am building an environment that adds
+the macro =let= to the scope.
+
+#+BEGIN_SRC scheme
+(l e ((m let e) (m ))
+#+END_SRC
+
+=let= has a complex interface with many arguments.  Let's try and do
+the factorial test first and then add currying before doing =let=.
+** Testing Factorial
+From the MiniKanren intro.
+#+BEGIN_SRC scheme
+(((λ (!) (λ (n) ((! !) n)))
+  (λ (!) (λ (n)
+           (if (zero? n)
+               1
+               (* n ((! !) (P n))))))) 5)
+#+END_SRC
+
+#+BEGIN_SRC scheme
+(((l (!) (l (n) ((! !) n)))
+  (l (!) (l (n)
+           (if (zero? n)
+               1
+               (* n ((! !) (P n))))))) 5)
+#+END_SRC
+
+I need to add =if=, =p=, and =*= for this to work
+
+#+BEGIN_SRC scheme
+  (use-modules (system base pmatch))
+  (define empty-env '())
+  (define lookup
+    (lambda (x env)
+      (pmatch env
+        [() (error 'lookup
+                  (format #t "unbound variable ~s" x))]
+        [((,V . ,v) . ,env^) (guard (eq? V x)) v]
+        [(,b . ,env^) (lookup x env^)])))
+  (define rep*
+    (lambda (old new tree)
+      (pmatch tree
+              [,s (guard (symbol? s))
+                  (if (eq? s old) new s)]
+              [() '()]
+              [(,a . ,d)
+               `(,(rep* old new a) . ,(rep* old new d))])))
+  (define elmr
+    (lambda (expr bindings)
+      (pmatch expr
+              ; numbers
+              [,n (guard (number? n)) n]
+              [(P ,n)
+               (let ([num (elmr n bindings)])
+                 (- num 1))]
+              [(* ,a ,b)
+               (* (elmr a bindings)
+                  (elmr b bindings))]
+              [(zero? ,n)
+               (zero? (elmr n bindings))]
+              ; Temporary Primitives
+              [(if ,e ,t ,f)
+               (if (elmr e bindings)
+                   (elmr t bindings)
+                   (elmr f bindings))]
+              ; variable lookup
+              [,x (guard (symbol? x)) (elmr (lookup x bindings) bindings)]
+              ; lazy macro expansion
+              [((m ,p ,b) ,a) (elmr b `((,p . ,a) . ,bindings))]
+              ; lazy lambda expansion
+              [((l ,p ,b) ,a) (let ([s (gensym)])
+                                (elmr (rep* p s b)
+                                      `((,s . ,a) . ,bindings)))]
+              ; left left recusion
+              [(,e ,a) (elmr `(,(elmr e bindings) ,a) bindings)]
+              ; Error case, just show the state
+              [else `(,expr ,bindings)])))
+  (define elm ;eval-lazy-lambda-macro
+    (lambda (expr)
+      (elmr expr empty-env)))
+#+END_SRC
+
+#+BEGIN_SRC scheme
+(elm '3)
+(elm '(m x x))
+(elm '((m x x) 3))
+(elm '(* 3 2))
+(elm '(((l x (l y x)) 3) 2))
+(elm '(((l x (l y (* x y))) 3) 2))
+#+END_SRC
+** An exploration in binding scope
+Something is wrong with my bindings or expansion, the last two there
+fail.
+
+The binding that x is 3 is being discarded on the =(,e='s rules first
+recursive return because I haven't captured the Clojure for =(l y='s
+evaluation.  This is why I was going to CPS the interpreter.  I could
+still partially do that by just recursively evaluating before
+inserting into the bindings?
+
+#+BEGIN_SRC scheme
+[(,e ,a) (let ([t (gensym)])
+           (elmr `(,t ,a)
+                 `((,t ,(elmr e bindings)) . ,bindings)))]
+#+END_SRC
+
+Do I need that recursive call?  the symbol lookup already performs the
+eval of things inserted.  No; but, I do need to make a rule for =(sym=
+distinct from =(expr=.
+
+#+BEGIN_SRC scheme
+[(,s ,a) (guard (symbol? s))
+ (elmr `(,(elmr s bindings) ,a) bindings)]
+[(,e ,a) (let ([t (gensym)])
+           (elmr `(,t ,a)
+                 `((,t ,e bindings) . ,bindings)))]
+#+END_SRC
+
+And this recursion is safe because the symbol lookup can't inject new
+bindings that will be discarded?  No, the evaluation of =e= happens
+within the lookup call, and that will contain the bindings I need for
+its evaluation later.  I need to thread the bindings back out?  Won't
+that have extra bindings left in the scope that are provably
+unreachable?  Maybe; but, it's safe because of the gensyms.  I sill
+don't like it.
+
+Time to thread
+** Threading the new scope passing method
+I don't need to thread it every where.
+
+I don't think I need to thread back out the bindings introduced within
+an evaluation of a primitive, because any bindings they introduce that
+weren't deducible from the context don't matter and any that were
+still are.
+#+BEGIN_SRC scheme
+(use-modules (system base pmatch))
+(define empty-env '())
+(define remeber_as_in
+  (lambda (var val env)
+    `((,var . ,val) . ,env)))
+(define lookup
+  (lambda (x env)
+    (pmatch env
+            [() (error 'lookup
+                       (format #t "unbound variable ~s" x))]
+            [((,V . ,v) . ,env^) (guard (eq? V x)) v]
+            [(,b . ,env^) (lookup x env^)])))
+(define rep*
+  (lambda (old new tree)
+    (pmatch tree
+            [,s (guard (not (pair? s)))
+                (if (eq? s old) new s)]
+            [() '()]
+            [(,a . ,d)
+             `(,(rep* old new a) . ,(rep* old new d))])))
+(define elmr ; expr -> bindings -> (expr bindings)
+  (lambda (expr bindings)
+    (let ([old_scope (lambda (v) (cons v bindings))]
+          [INTERMEDIATE (cons expr bindings)])
+      (pmatch expr
+              ;; numbers
+              [,n (guard (number? n)) (old_scope n)]
+              [(P ,n)
+               (let ([num (car (elmr n bindings))])
+                 (old_scope (- num 1)))]
+              [(* ,a ,b)
+               (old_scope
+                (* (car (elmr a bindings))
+                   (car (elmr b bindings))))]
+              [(zero? ,n)
+               (old_scope
+                (zero? (car (elmr n bindings))))]
+              ;; Temporary Primitives
+              [(if ,c ,t ,f)
+               (if (car (elmr c bindings))
+                   (elmr t bindings)
+                   (elmr f bindings))]
+              ;; variable lookup <- Major Un-Lazy-ing Calculation Point
+              [,x (guard (symbol? x))
+                  (elmr (lookup x bindings) bindings)]
+              ;; lazy macro expansion
+              [(m ,p ,b) INTERMEDIATE]
+              [((m ,p ,b) ,a)
+               (let* ([extended_bindings (remeber_as_in p a bindings)])
+                 (elmr b extended_bindings))]
+              ;; lazy lambda expansion
+              [(l ,p ,b) INTERMEDIATE]
+              [((l ,p ,b) ,a)
+               (let* ([s (gensym)]
+                      [body (rep* p s b)]
+                      [extended_bindings (remeber_as_in s a bindings)])
+                 (elmr body extended_bindings))]
+              ;; left left recusion
+              [(,s ,a) (guard (symbol? s))
+               (let* ([S (elmr s bindings)]
+                      [f (car S)]
+                      [bind (cdr S)])
+                 (elmr `(,f ,a) bind))]
+              [(,e ,a) (let* ([t (gensym)]
+                              [extended_bindings (remeber_as_in t e bindings)])
+                         (elmr `(,t ,a) extended_bindings))]
+              ;; Error case, just show the state
+              [else `(HALT ,expr ,bindings)]))))
+(define elm ;eval-lazy-lambda-macro
+  (lambda (expr)
+    (let ([V (elmr expr empty-env)])
+      (if (eq? 'HALT (car V))
+          V
+          (car V)))))
+#+END_SRC
+
+#+BEGIN_SRC scheme
+(elm '3)                                ; 3
+(elm '(m x x))                          ; I
+(elm '((m x x) 3))                      ; (I 3)
+(elm '(* 3 2))                          ; (* 3 2)
+(elm '(((l x (l y x)) 3) 2))            ; (#t 3 2)
+(elm '(((l x (l y (* x y))) 3) 2))      ; (* 3 2)
+#+END_SRC
+
+Got it, I needed to return intermediate values without trying to
+evaluate them.  The default case was structuring them without a tag
+and they were getting mistakenly re-parsed.
+
+Time for
+
+#+BEGIN_SRC scheme
+(((l (!) (l (n) ((! !) n)))
+  (l (!) (l (n)
+           (if (zero? n)
+               1
+               (* n ((! !) (P n))))))) 5)
+#+END_SRC
+
+Nope
+
+Time to walk the trace.
+
+Woops, forgot that I don't have =()= in my lambdas
+
+#+BEGIN_SRC scheme
+(((l ! (l n ((! !) n)))
+  (l ! (l n
+           (if (zero? n)
+               1
+               (* n ((! !) (P n))))))) 5)
+#+END_SRC
+
+It works!
+** Verification of Lazy
+Now, let's try and test the lazy.  If I recall the regular Y
+combinator isn't resolvable by a normal (non-lazy) interpreter.  Let's
+check it in guile and then in mine.
+
+#+BEGIN_SRC scheme
+(((l f ((l x (f (x x)))(l x (f (x x)))))
+  (l ! (l n (if (zero? n) 1
+                (* n (! (P n))))))) 5)
+#+END_SRC
+
+Works on mine first try, time to translate/transcribe to regular
+lambdas
+
+#+BEGIN_SRC scheme
+(define P (lambda n (- n 1)))
+(((lambda (f) ((lambda (x) (f (x x)))(lambda (x) (f (x x)))))
+  (lambda (!) (lambda (n) (if (zero? n) 1
+                              (* n (! (P n))))))) 5)
+#+END_SRC
+
+Yee, stack overflow reached.
+
+Now I have to test the macros work.
+** Macros?
+Is it time for "the man or boy test"?  Nope, it's using =set!= in the
+=B= to change the associated =A='s instance of =k=.  A clever test;
+but, not one that I support in my functional language.
+
+How to test that macros work?
+
+I guess it's time to implement =let=?  It's a pretty simple extension
+to the language.  I don't have cons car cdr yet, so I'm going to have
+let be =(let var val body)=.
+
+#+BEGIN_SRC scheme
+((l exp (m let exp)
+   (
+                                        ; defn of let
+    (m var (l val (l body
+       ((m var body) val))))
+    ))
+                                        ; code
+ (let x 3 x)
+ )
+#+END_SRC
+
+This requires the second copy of =var= to be replaced by a lookup of
+the first copy of =var=.  Lookup must return the binding scope that
+the binding was made in so that if there are successive lookups, they
+can happen at the correct scope?  Then any bindings added in the sub
+scope will need to be added to the calling scope as well though.
+Right, this is what hygienic macros are for; but, I intentionally
+didn't use those because they can be implemented using regular macros
+and lambdas.  So, is this correct?  I think so, the body will look up
+=let=, it'll find that it's been ... No, =var= has been bound to it,
+not the other way around.  This is what quoting is for.  If I make it
+so that macros evaluate their formal parameter I can quote the
+instances where I mean it as an atom and let it be dereference when I
+mean its value.  Can I do the same with lambdas?  Sure, there's no
+reason that I can't, it'll just look a little strange to normal
+lisp/scheme.
+
+#+BEGIN_SRC scheme
+(use-modules (system base pmatch))
+(define empty-env '())
+(define remeber_as_in
+  (lambda (var val env)
+    `((,var . ,val) . ,env)))
+(define lookup
+  (lambda (x env)
+    (pmatch env
+            [() (error 'lookup
+                       (format #t "unbound variable ~s" x))]
+            [((,V . ,v) . ,env^) (guard (eq? V x)) v]
+            [(,b . ,env^) (lookup x env^)])))
+(define rep*
+  (lambda (old new tree)
+    (pmatch tree
+            [,s (guard (not (pair? s)))
+                (if (eq? s old) new s)]
+            [() '()]
+            [(,a . ,d)
+             `(,(rep* old new a) . ,(rep* old new d))])))
+(define elmr ; expr -> bindings -> (expr bindings)
+  (lambda (expr bindings)
+    (let ([old_scope (lambda (v) (cons v bindings))]
+          [INTERMEDIATE (cons expr bindings)])
+      (pmatch expr
+              ;; numbers
+              [,n (guard (number? n)) (old_scope n)]
+              [(P ,n)
+               (let ([num (car (elmr n bindings))])
+                 (old_scope (- num 1)))]
+              [(* ,a ,b)
+               (old_scope
+                (* (car (elmr a bindings))
+                   (car (elmr b bindings))))]
+              [(zero? ,n)
+               (old_scope
+                (zero? (car (elmr n bindings))))]
+              ;; Temporary Primitives
+              [(if ,c ,t ,f)
+               (if (car (elmr c bindings))
+                   (elmr t bindings)
+                   (elmr f bindings))]
+              ;; variable lookup <- Major Un-Lazy-ing Calculation Point
+              [(q ,x) (old_scope x)]
+              [,x (guard (symbol? x))
+                  (elmr (lookup x bindings) bindings)]
+              ;; lazy macro expansion
+              [(m ,p ,b) INTERMEDIATE]
+              [((m ,p ,b) ,a)
+               (let* ([param (car (elmr p bindings))]
+                      [extended_bindings (remeber_as_in param a bindings)])
+                 (elmr b extended_bindings))]
+              ;; lazy lambda expansion
+              [(l ,p ,b) INTERMEDIATE]
+              [((l ,p ,b) ,a)
+               (let* ([s (gensym)]
+                      [param (car (elmr p bindings))]
+                      [body (rep* param s b)]
+                      [extended_bindings (remeber_as_in s a bindings)])
+                 (elmr body extended_bindings))]
+              ;; left left recusion
+              [(,s ,a) (guard (symbol? s))
+               (let* ([S (elmr s bindings)]
+                      [f (car S)]
+                      [bind (cdr S)])
+                 (elmr `(,f ,a) bind))]
+              [(,e ,a) (let* ([t (gensym)]
+                              [extended_bindings (remeber_as_in t e bindings)])
+                         (elmr `(,t ,a) extended_bindings))]
+              ;; Error case, just show the state
+              [else `(HALT ,expr ,bindings)]))))
+(define elm ;eval-lazy-lambda-macro
+  (lambda (expr)
+    (let ([V (elmr expr empty-env)])
+      (if (eq? 'HALT (car V))
+          V
+          (car V)))))
+#+END_SRC
+
+It seems that I can't pattern match against the =quote= because it's
+parsed within the =pmatch= pattern.  Using =q= for now as an easy
+workaround.
+
+#+BEGIN_SRC scheme
+(elm '3)                                    ; 3
+(elm '(m (q x) x))                          ; I
+(elm '((m (q x) x) 3))                      ; (I 3)
+(elm '(* 3 2))                              ; (* 3 2)
+(elm '(((l (q x) (l (q y) x)) 3) 2))        ; (#t 3 2)
+(elm '(((l (q x) (l (q y) (* x y))) 3) 2))  ; (* 3 2)
+#+END_SRC
+
+
+#+BEGIN_SRC scheme
+((l (q exp) ((m (q let) exp)
+                                        ; defn of let
+    (m (q var) (l (q val) (l (q body)
+       ((m var body) val))))
+    ))
+                                        ; code
+ (((let (q x)) 3) x)
+ )
+#+END_SRC
+
+Yeeeee
