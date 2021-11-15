@@ -1,6 +1,6 @@
 (use-modules (system base pmatch))
 (define empty-env '())
-(define remeber_as_in
+(define remember_as_in
   (lambda (var val env)
     `((,var . ,val) . ,env)))
 (define lookup
@@ -24,7 +24,7 @@
           [INTERMEDIATE (cons expr bindings)])
       (pmatch expr
               ;; numbers
-              [,n (guard (number? n)) (old_scope n)]
+              [,n (guard (number? n)) INTERMEDIATE]
               [(P ,n)
                (let ([num (car (elmr n bindings))])
                  (old_scope (- num 1)))]
@@ -40,32 +40,32 @@
                (if (car (elmr c bindings))
                    (elmr t bindings)
                    (elmr f bindings))]
-              ;; variable lookup <- Major Un-Lazy-ing Calculation Point
+              ;; Quote
               [(q ,x) (old_scope x)]
+              ;; variable lookup <- Major Un-Lazy-ing Calculation Point
               [,x (guard (symbol? x))
                   (elmr (lookup x bindings) bindings)]
               ;; lazy macro expansion
               [(m ,p ,b) INTERMEDIATE]
               [((m ,p ,b) ,a)
                (let* ([param (car (elmr p bindings))]
-                      [extended_bindings (remeber_as_in param a bindings)])
+                      [extended_bindings (remember_as_in param a bindings)])
                  (elmr b extended_bindings))]
               ;; lazy lambda expansion
-              [(l ,p ,b) INTERMEDIATE]
-              [((l ,p ,b) ,a)
+              ;; Alpha rename to a gensym, then be a macro.
+              [(l ,p ,b)
                (let* ([s (gensym)]
-                      [param (car (elmr p bindings))]
-                      [body (rep* param s b)]
-                      [extended_bindings (remeber_as_in s a bindings)])
-                 (elmr body extended_bindings))]
-              ;; left left recusion
+                      [p^ (car (elmr p bindings))]
+                      [b^ (rep* p^ s b)])
+                 (old_scope `(m (q ,s) ,b^)))]
+              ;; left left recursion
               [(,s ,a) (guard (symbol? s))
                (let* ([S (elmr s bindings)]
                       [f (car S)]
                       [bind (cdr S)])
                  (elmr `(,f ,a) bind))]
               [(,e ,a) (let* ([t (gensym)]
-                              [extended_bindings (remeber_as_in t e bindings)])
+                              [extended_bindings (remember_as_in t e bindings)])
                          (elmr `(,t ,a) extended_bindings))]
               ;; Error case, just show the state
               [else `(HALT ,expr ,bindings)]))))
