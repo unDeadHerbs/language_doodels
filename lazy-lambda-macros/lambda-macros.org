@@ -981,3 +981,350 @@ Now only macros can self evaluate, removing the else.
   (lambda (expr)
     (elmr expr (lambda (v) `(ERR ,v)))))
 #+END_SRC
+
+Could I make =alpha= the primitive and have lambda just expand?
+
+#+BEGIN_SRC scheme
+(use-modules (system base pmatch))
+(define empty-env '())
+(define remember_as_in
+  (lambda (var val env)
+    `((,var . ,val) . ,env)))
+(define lookup
+  (lambda (x env)
+    (pmatch env
+            [() (error 'lookup
+                       (format #t "unbound variable ~s" x))]
+            [((,V . ,v) . ,env^) (guard (eq? V x)) v]
+            [(,b . ,env^) (lookup x env^)])))
+(define alpha
+  (lambda (old new tree)
+    (pmatch tree
+            [,s (guard (not (pair? s)))
+                (if (eq? s old) new s)]
+            [() '()]
+            [(,a . ,d)
+             `(,(alpha old new a) . ,(alpha old new d))])))
+(define elmr ; expr -> bindings -> (expr bindings)
+  (lambda (expr bindings)
+    (let ([old_scope (lambda (v) (cons v bindings))]
+          [INTERMEDIATE (cons expr bindings)])
+      (pmatch expr
+              ;; numbers
+              [,n (guard (number? n)) INTERMEDIATE]
+              [(P ,n)
+               (let ([num (car (elmr n bindings))])
+                 (old_scope (- num 1)))]
+              [(* ,a ,b)
+               (old_scope
+                (* (car (elmr a bindings))
+                   (car (elmr b bindings))))]
+              [(zero? ,n)
+               (old_scope
+                (zero? (car (elmr n bindings))))]
+              ;; Temporary Primitives
+              [(if ,c ,t ,f)
+               (if (car (elmr c bindings))
+                   (elmr t bindings)
+                   (elmr f bindings))]
+              ;; Quote
+              [(q ,x) (old_scope x)]
+              ;; variable lookup <- Major Un-Lazy-ing Calculation Point
+              [,x (guard (symbol? x))
+                  (elmr (lookup x bindings) bindings)]
+              ;; Macro Binding
+              [(m ,p ,b) INTERMEDIATE]
+              [((m ,p ,b) ,a)
+               (let* ([param (car (elmr p bindings))]
+                      [extended_bindings (remember_as_in param a bindings)])
+                 (elmr b extended_bindings))]
+              ;; Lambda Expansion
+              ;; Alpha Rename to a gensym, then be a macro.
+              [(l ,p ,b)
+               (let ([s (gensym)])
+                 (old_scope
+                  `(a ,p (q ,s) (m ,s ,b))))]
+              ;; Alpha Renaming
+              ;; I know that ,n will be a quote because I generated it; but, generality
+              [(a ,o ,n ,b)
+               (let ([o^ (car (elmr o bindings))]
+                     [n^ (car (elmr n bindings))])
+                 (old_scope (alpha o^ n^ b)))]
+              ;; left left recursion
+              [(,s ,a) (guard (symbol? s))
+               (let* ([S (elmr s bindings)]
+                      [f (car S)]
+                      [bind (cdr S)])
+                 (elmr `(,f ,a) bind))]
+              [(,e ,a) (let* ([t (gensym)]
+                              [extended_bindings (remember_as_in t e bindings)])
+                         (elmr `(,t ,a) extended_bindings))]
+              ;; Error case, just show the state
+              [else `(HALT ,expr ,bindings)]))))
+(define elm ;eval-lazy-lambda-macro
+  (lambda (expr)
+    (let ([V (elmr expr empty-env)])
+      (if (eq? 'HALT (car V))
+          V
+          (car V)))))
+#+END_SRC
+
+Hmm, if I move the alpha renaming function to be inline, then this can
+deal with infinite code trees as well.  This won't matter for user
+entered code, but, if MiniKanren is generating holes, this will
+prevent unnecessary expansion.
+
+#+BEGIN_SRC scheme
+(use-modules (system base pmatch))
+(define empty-env '())
+(define remember_as_in
+  (lambda (var val env)
+    `((,var . ,val) . ,env)))
+(define lookup
+  (lambda (x env)
+    (pmatch env
+            [() (error 'lookup
+                       (format #t "unbound variable ~s" x))]
+            [((,V . ,v) . ,env^) (guard (eq? V x)) v]
+            [(,b . ,env^) (lookup x env^)])))
+(define alpha
+  (lambda (old new tree)
+    (pmatch tree
+            [,s (guard (not (pair? s)))
+                (if (eq? s old) new s)]
+            [() '()]
+            [(,a . ,d)
+             `(,(alpha old new a) . ,(alpha old new d))])))
+(define elmr ; expr -> bindings -> (expr bindings)
+  (lambda (expr bindings)
+    (let ([old_scope (lambda (v) (cons v bindings))]
+          [INTERMEDIATE (cons expr bindings)])
+      (pmatch expr
+              ;; numbers
+              [,n (guard (number? n)) INTERMEDIATE]
+              [(P ,n)
+               (let ([num (car (elmr n bindings))])
+                 (old_scope (- num 1)))]
+              [(* ,a ,b)
+               (old_scope
+                (* (car (elmr a bindings))
+                   (car (elmr b bindings))))]
+              [(zero? ,n)
+               (old_scope
+                (zero? (car (elmr n bindings))))]
+              ;; Temporary Primitives
+              [(if ,c ,t ,f)
+               (if (car (elmr c bindings))
+                   (elmr t bindings)
+                   (elmr f bindings))]
+              ;; Quote
+              [(q ,x) (old_scope x)]
+              ;; variable lookup <- Major Un-Lazy-ing Calculation Point
+              [,x (guard (symbol? x))
+                  (elmr (lookup x bindings) bindings)]
+              ;; Macro Binding
+              [(m ,p ,b) INTERMEDIATE]
+              [((m ,p ,b) ,a)
+               (let* ([param (car (elmr p bindings))]
+                      [extended_bindings (remember_as_in param a bindings)])
+                 (elmr b extended_bindings))]
+              ;; Lambda Expansion
+              ;; Alpha Rename to a gensym, then be a macro.
+              [(l ,p ,b)
+               (let ([s (gensym)])
+                 (old_scope
+                  `(a ,p (q ,s) (m ,s ,b))))]
+              ;; Alpha Renaming
+              ;; pair
+              [(a ,o ,n (,ba . ,bd))
+               (old_scope `((a ,o ,n ,ba) ]
+              ;; empty
+              ;; symbol
+              ;; default
+              [(a ,o ,n ,b)
+               (let ([o^ (car (elmr o bindings))]
+                     [n^ (car (elmr n bindings))])
+                 (old_scope (alpha o^ n^ b)))]
+              ;; left left recursion
+              [(,s ,a) (guard (symbol? s))
+               (let* ([S (elmr s bindings)]
+                      [f (car S)]
+                      [bind (cdr S)])
+                 (elmr `(,f ,a) bind))]
+              [(,e ,a) (let* ([t (gensym)]
+                              [extended_bindings (remember_as_in t e bindings)])
+                         (elmr `(,t ,a) extended_bindings))]
+              ;; Error case, just show the state
+              [else `(HALT ,expr ,bindings)]))))
+(define elm ;eval-lazy-lambda-macro
+  (lambda (expr)
+    (let ([V (elmr expr empty-env)])
+      (if (eq? 'HALT (car V))
+          V
+          (car V)))))
+#+END_SRC
+
+I need to add cons to the language for that?  I could make Lambdas,
+Macros, and Alphas Curried?  That'll be ugly.  Let's try it.
+
+
+#+BEGIN_SRC scheme
+(use-modules (ice-9 pretty-print))
+(use-modules (system base pmatch))
+(define dots (lambda (v)
+               (display ".")
+               (if (null? v) '()
+                   (dots (cdr v)))))
+;(define prnt
+;  (lambda (v) (dots v) (display "\n")))
+(define prnt
+  (lambda (v) (write v) (display "\n")))
+(define empty-env '())
+(define remember_as_in
+  (lambda (var val env)
+    `((,var . ,val) . ,env)))
+(define lookup
+  (lambda (x env explanation)
+    (pmatch env
+            [() (error 'lookup
+                       (format #t "unbound variable ~s" x))]
+            [((,V . ,v) . ,env^)
+             (guard (eq? V x))
+             (prnt `((lookup ,x) . ,explanation))
+             v]
+            [(,b . ,env^) (lookup x env^ explanation)])))
+(define gcar ; guard car
+  (lambda (p)
+    (if (pair? p) (car p) #f)))
+(define elmr ; expr -> bindings -> (expr bindings)
+  (lambda (expr bindings explanation)
+    (prnt explanation)
+    (prnt `(expr ,expr))
+    (prnt `(bind ,bindings))
+    (pretty-print `(bind ,bindings))
+    (prnt '())
+    (let ([old_scope (lambda (v) (cons v bindings))]
+          [INTERMEDIATE (cons expr bindings)])
+      (pmatch expr
+              ;; numbers
+              [,n (guard (number? n)) INTERMEDIATE]
+              [(P ,n)
+               (let ([num (car (elmr n bindings (cons 'P explanation)))])
+                 (old_scope (- num 1)))]
+              [(* ,a) INTERMEDIATE]
+              [((* ,a) ,b)
+               (old_scope
+                (* (car (elmr a bindings (cons '*l explanation)))
+                   (car (elmr b bindings (cons '*r explanation)))))]
+              [(zero? ,n)
+               (old_scope
+                (zero? (car (elmr n bindings (cons 'zero? explanation)))))]
+              ;; Temporary Primitives
+              [if INTERMEDIATE]
+              [(if ,c) INTERMEDIATE]
+              [((if ,c) ,t) INTERMEDIATE]
+              [(((if ,c) ,t) ,f)
+               (if (car (elmr c bindings (cons 'if explanation)))
+                   (elmr t bindings explanation)
+                   (elmr f bindings explanation))]
+              ;; Quote
+              [q INTERMEDIATE]
+              [(q ,x) (old_scope x)]
+              ;; Macro Binding
+              [m INTERMEDIATE]
+              [(m ,p) INTERMEDIATE]
+              [((m ,p) ,b) INTERMEDIATE]
+              [(((m ,p) ,b) ,a)
+               (let* ([p^ (car (elmr p bindings (cons 'm-bind explanation)))]
+                      [extended_bindings (remember_as_in p^ a bindings)])
+                 (elmr b extended_bindings explanation))]
+              ;; Lambda Expansion
+              ;; Alpha Rename to a gensym, then be a macro.
+              [l INTERMEDIATE]
+              [(l ,p) INTERMEDIATE]
+              [((l ,p) ,b)
+               (let ([s (gensym)])
+                 (old_scope
+                  `((m (q ,s)) (((a ,p) (q ,s)) ,b))))]
+              ;; Alpha Renaming
+              [a INTERMEDIATE]
+              [(a ,o) INTERMEDIATE]
+              [((a ,o) ,n) INTERMEDIATE]
+              ;; Double Alpha - resolve inner
+              [(((a ,o) ,n) ,b)
+               (guard (eq? (gcar (gcar (gcar b))) 'a))
+               (let* ([S (elmr b bindings (cons 'aa explanation))]
+                     [bod (car S)]
+                     [bind (cdr S)])
+                 (elmr `(((a ,o) ,n) ,bod)
+                       bind explanation))]
+              ;; Alpha(Pair)
+              [(((a ,o) ,n) (,ba ,bd))
+               ;(guard (not (eq? bd 'a))) 
+               (elmr `((((a ,o) ,n) ,ba)
+                       (((a ,o) ,n) ,bd))
+                     bindings explanation)]
+              ;; Alpha(Symbol)
+              [(((a ,o) ,n) ,s) (guard (symbol? s))
+               (let ([o^ (car (elmr o bindings (cons 'alpha-o explanation)))]
+                     [n^ (car (elmr n bindings (cons 'alpha-n explanation)))])
+                 (elmr (if (eq? o^ s) n^ s)
+                       bindings explanation))]
+              ;; left left recursion
+              [(,s ,a) (guard (symbol? s))
+               (let* ([S (elmr s bindings (cons `(left ,a) explanation))]
+                      [f (car S)]
+                      [bind (cdr S)])
+                 (elmr `(,f ,a) bind explanation))]
+              [(,e ,a) (let* ([t (gensym)]
+                              [extended_bindings (remember_as_in t e bindings)])
+                         (elmr `(,t ,a) extended_bindings explanation))]
+              ;; Variable Lookup (& Lazy's Undeferring)
+              [,x (guard (symbol? x))
+                  (elmr (lookup x bindings explanation) bindings explanation)]
+              ;; Error case, just show the state
+              [else `(HALT ,expr ,bindings)]))))
+(define elm ;eval-lazy-lambda-macro
+  (lambda (expr)
+    (let ([V (elmr expr empty-env '(eval))])
+      (if (eq? 'HALT (car V))
+          V
+          (car V)))))
+#+END_SRC
+
+Now I really need to retest this.
+
+#+BEGIN_SRC scheme
+;; Simple Tests
+(elm '3)                                        ; 3
+(elm '((m (q x)) x))                            ; I
+(elm '((l (q x)) x))                            ; I
+(elm '(((m (q x)) x) 3))                        ; (I 3)
+(elm '(((l (q x)) x) 3))                        ; (I 3)
+(elm '((* 3) 2))                                ; (* 3 2)
+(elm '(((l (q x)) ((l (q y)) x)) 3))            ; (#t 3)
+(elm '((((l (q x)) ((l (q y)) x)) 3) 2))        ; (#t 3 2)
+(elm '((((l (q x)) ((l (q y)) (* x y))) 3) 2))  ; (* 3 2)
+
+;; Regular Factorial
+(elm '((((l !) ((l n) ((! !) n)))
+        ((l !) ((l n)
+                (((if (zero? n))
+                  1)
+                 ((* n) ((! !) (P n))))))) 5))
+
+;; Lazy Dependent Factorial
+(elm '((((l f) (((l x) (f (x x)))((l x) (f (x x)))))
+        ((l !) ((l n) (((if (zero? n)) 1)
+                       ((* n) (! (P n))))))) 5))
+
+;; Defining =let=
+(elm '(((l (q exp))
+        ;; Defn of =let=
+        (((m (q let)) exp)
+         ((m (q var)) ((l (q val)) ((l (q body))
+                                    (((m var) body) val))))
+         ))
+       ;; Code in new Evaluator
+       (((let (q x)) 3) x)))
+#+END_SRC
